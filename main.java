@@ -110,3 +110,59 @@ public class HedgeBet {
         private void bind(JComponent root, KeyStroke ks, Runnable r) {
             String name = "hk_" + ks.toString();
             root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(ks, name);
+            root.getActionMap().put(name, new AbstractAction() { @Override public void actionPerformed(ActionEvent e){ r.run(); }});
+        }
+
+        private void bootTape() {
+            tape.add("BOOT","feed: local-sim (no network)");
+            tape.add("BOOT","oracle: payload builder (mock signature)");
+            tape.add("BOOT","hotkeys: Ctrl/Cmd+K focus, Ctrl/Cmd+T density, Ctrl/Cmd+Shift+C copy");
+        }
+
+        private void bootLoops() {
+            scheduler.scheduleAtFixedRate(() -> { sim.step(); watch.refresh(); market.refresh(); status.setRight("chain=EVM | now=" + clock()); }, 200, TICK_MS, TimeUnit.MILLISECONDS);
+            scheduler.scheduleAtFixedRate(() -> persist.save(state), AUTOSAVE_SEC, AUTOSAVE_SEC, TimeUnit.SECONDS);
+            scheduler.scheduleAtFixedRate(() -> { TapeItem it; while ((it=tape.poll())!=null) terminal.println(it.t, "["+it.tag+"] "+it.msg); }, 120, 120, TimeUnit.MILLISECONDS);
+        }
+
+        private void onResult(CmdResult r) {
+            if (r == null) return;
+            if (r.toast != null && !r.toast.isBlank()) tape.add(r.tag, r.toast);
+            if (r.lines != null) for (String l : r.lines) tape.add(r.tag, l);
+            if (r.mutate != null) r.mutate.run();
+            watch.refresh();
+            market.refresh();
+        }
+
+        private void buildCommands() {
+            cmd.reg("help", "help", c -> CmdResult.lines("HELP","help", helpLines()));
+            cmd.reg("clear","clear", c -> { terminal.clear(); return CmdResult.ok("TERM","cleared"); });
+            cmd.reg("watch","watch add|del|list", this::doWatch);
+            cmd.reg("sym","sym LAMA/USD", c -> {
+                if (c.args.size()<2) return CmdResult.err("SYMBOL","usage: sym <AAA/BBB>");
+                String s = Norm.symbol(c.args.get(1));
+                if (s.isBlank()) return CmdResult.err("SYMBOL","bad symbol");
+                return CmdResult.mutate("SYMBOL","active="+s, () -> state.activeSymbol = s);
+            });
+            cmd.reg("mk","mk <strike> <band> <openSec> <lockSec> <closeSec>", this::doMk);
+            cmd.reg("bet","bet up|down|flat <amt>", this::doBet);
+            cmd.reg("settle","settle <price>", this::doSettle);
+            cmd.reg("oracle","oracle id|build", this::doOracle);
+        }
+
+        private CmdResult doWatch(CmdCtx c) {
+            if (c.args.size()<2 || "list".equalsIgnoreCase(c.args.get(1))) {
+                List<String> out = new ArrayList<>();
+                int i=1;
+                for (String s : state.watch) {
+                    MarketSim.Quote q = sim.quote(s);
+                    out.add(String.format(Locale.ROOT, "%2d  %-12s  %10s  %8s  %s", i++, s, Fmt.money(q.priceE8), q.pct(), q.spark));
+                }
+                return CmdResult.lines("WATCH","watchlist", out);
+            }
+            if (c.args.size()>=3 && "add".equalsIgnoreCase(c.args.get(1))) {
+                String s = Norm.symbol(c.args.get(2));
+                if (s.isBlank()) return CmdResult.err("WATCH","bad symbol");
+                return CmdResult.mutate("WATCH","added "+s, () -> { if (!state.watch.contains(s)) state.watch.add(s); sim.quote(s); });
+            }
+            if (c.args.size()>=3 && "del".equalsIgnoreCase(c.args.get(1))) {
