@@ -166,3 +166,59 @@ public class HedgeBet {
                 return CmdResult.mutate("WATCH","added "+s, () -> { if (!state.watch.contains(s)) state.watch.add(s); sim.quote(s); });
             }
             if (c.args.size()>=3 && "del".equalsIgnoreCase(c.args.get(1))) {
+                String s = Norm.symbol(c.args.get(2));
+                return CmdResult.mutate("WATCH","removed "+s, () -> state.watch.remove(s));
+            }
+            return CmdResult.err("WATCH","usage: watch add|del|list");
+        }
+
+        private CmdResult doMk(CmdCtx c) {
+            if (c.args.size()<6) return CmdResult.err("MKT","usage: mk <strike> <band> <openSec> <lockSec> <closeSec>");
+            long strike = Fmt.e8(c.args.get(1));
+            long band = Fmt.e8(c.args.get(2));
+            int open = Norm.i(c.args.get(3));
+            int lock = Norm.i(c.args.get(4));
+            int close = Norm.i(c.args.get(5));
+            if (strike<=0 || band<=0) return CmdResult.err("MKT","strike/band must be >0");
+            if (!(open<lock && lock<close)) return CmdResult.err("MKT","need open<lock<close");
+            MarketSim.Market m = sim.mk(state.activeSymbol, strike, band, open, lock, close);
+            return CmdResult.mutate("MKT","created #"+m.id+" "+m.symbol, () -> state.activeMarketId = m.id);
+        }
+
+        private CmdResult doBet(CmdCtx c) {
+            if (c.args.size()<3) return CmdResult.err("BET","usage: bet up|down|flat <amt>");
+            MarketSim.Market m = sim.get(state.activeMarketId);
+            if (m==null) return CmdResult.err("BET","no active market");
+            MarketSim.Bucket b = switch (c.args.get(1).toLowerCase(Locale.ROOT)) {
+                case "up" -> MarketSim.Bucket.UP;
+                case "down" -> MarketSim.Bucket.DOWN;
+                case "flat" -> MarketSim.Bucket.FLAT;
+                default -> null;
+            };
+            if (b==null) return CmdResult.err("BET","bucket must be up/down/flat");
+            long amt = Fmt.cents(c.args.get(2));
+            if (amt<=0) return CmdResult.err("BET","amount must be >0");
+            if (!sim.bet(m.id,"YOU",b,amt)) return CmdResult.err("BET","market not open");
+            return CmdResult.ok("BET","YOU "+b+" "+Fmt.money2(amt));
+        }
+
+        private CmdResult doSettle(CmdCtx c) {
+            if (c.args.size()<2) return CmdResult.err("SET","usage: settle <price>");
+            MarketSim.Market m = sim.get(state.activeMarketId);
+            if (m==null) return CmdResult.err("SET","no active market");
+            long p = Fmt.e8(c.args.get(1));
+            MarketSim.Settle s = sim.settle(m.id, p);
+            if (s==null) return CmdResult.err("SET","market not closable yet");
+            return CmdResult.lines("SET","settled", List.of("market#"+m.id+" final="+Fmt.money(p)+" winner="+s.winner, "hint: oracle build"));
+        }
+
+        private CmdResult doOracle(CmdCtx c) {
+            if (c.args.size()<2 || "id".equalsIgnoreCase(c.args.get(1))) {
+                return CmdResult.lines("ORACLE","id", List.of("oracleKey="+oracle.keyHint(), "note: local mock; mainnet signs with your real key"));
+            }
+            if ("build".equalsIgnoreCase(c.args.get(1))) {
+                MarketSim.Market m = sim.get(state.activeMarketId);
+                if (m==null || m.settle==null) return CmdResult.err("ORACLE","need settled market");
+                OracleToy.Payload pl = oracle.settle(m.id, m.symbol, m.settle.priceE8, m.lockAt, m.closeAt);
+                Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(pl.json), null);
+                return CmdResult.lines("ORACLE","copied JSON", List.of("digest="+pl.digestHex, "oracleNonce="+pl.oracleNonce, "meta="+pl.metaHex, "sig="+pl.sigHex, "", pl.json));
