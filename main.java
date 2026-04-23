@@ -222,3 +222,59 @@ public class HedgeBet {
                 OracleToy.Payload pl = oracle.settle(m.id, m.symbol, m.settle.priceE8, m.lockAt, m.closeAt);
                 Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(pl.json), null);
                 return CmdResult.lines("ORACLE","copied JSON", List.of("digest="+pl.digestHex, "oracleNonce="+pl.oracleNonce, "meta="+pl.metaHex, "sig="+pl.sigHex, "", pl.json));
+            }
+            return CmdResult.err("ORACLE","usage: oracle id|build");
+        }
+
+        private List<String> helpLines() {
+            return List.of(
+                "help | clear",
+                "watch list | watch add LAMA/USD | watch del ETH/USD",
+                "sym LAMA/USD",
+                "mk 100 0.5 2 10 20",
+                "bet up 250 | bet down 250 | bet flat 250",
+                "settle 101.25",
+                "oracle id | oracle build",
+                "",
+                "Hotkeys: Ctrl/Cmd+K focus cmd, Ctrl/Cmd+T density, Ctrl/Cmd+Shift+C copy last"
+            );
+        }
+    }
+
+    private static String clock() {
+        return DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault()).format(Instant.now());
+    }
+
+    static final class Theme {
+        final Color bg0, bg1, fg0, fg1, dim, lime, amber, red, cyan, blue;
+        final Font fontSm, fontMd, fontMono;
+        Theme(Color bg0, Color bg1, Color fg0, Color fg1, Color dim, Color lime, Color amber, Color red, Color cyan, Color blue, Font fontSm, Font fontMd, Font fontMono) {
+            this.bg0=bg0; this.bg1=bg1; this.fg0=fg0; this.fg1=fg1; this.dim=dim;
+            this.lime=lime; this.amber=amber; this.red=red; this.cyan=cyan; this.blue=blue;
+            this.fontSm=fontSm; this.fontMd=fontMd; this.fontMono=fontMono;
+        }
+        static Theme bloomLama() {
+            Color bg0=new Color(11,14,18), bg1=new Color(16,20,26);
+            Color fg0=new Color(222,228,236), fg1=new Color(180,190,202), dim=new Color(124,136,152);
+            Color lime=new Color(70,220,160), amber=new Color(255,190,80), red=new Color(255,96,96);
+            Color cyan=new Color(90,205,255), blue=new Color(120,140,255);
+            Font mono=new Font(Font.MONOSPACED, Font.PLAIN, 13);
+            return new Theme(bg0,bg1,fg0,fg1,dim,lime,amber,red,cyan,blue, mono.deriveFont(12f), mono.deriveFont(Font.BOLD, 13f), mono);
+        }
+    }
+
+    static final class Terminal extends JPanel {
+        private final JTextArea out = new JTextArea();
+        private final Deque<String> last = new ArrayDeque<>();
+        Terminal(Theme theme) {
+            super(new BorderLayout());
+            setBackground(theme.bg0);
+            out.setEditable(false);
+            out.setLineWrap(true);
+            out.setWrapStyleWord(true);
+            out.setFont(theme.fontMono);
+            out.setBackground(theme.bg0);
+            out.setForeground(theme.fg0);
+            out.setCaretColor(theme.fg0);
+            out.setBorder(new EmptyBorder(10,10,10,10));
+            JScrollPane sp = new JScrollPane(out);
