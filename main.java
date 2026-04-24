@@ -726,3 +726,59 @@ public class HedgeBet {
         String keyHint(){ byte[] h=Hash.sha3(key); return "0x"+Hex.hex(Arrays.copyOfRange(h,0,8))+"…"; }
         Payload settle(int marketId,String symbol,long priceE8,long lockAt,long closeAt){
             long n=++nonce;
+            byte[] meta=new byte[32]; rng.nextBytes(meta);
+            byte[] symH=Hash.sha3(symbol.getBytes(StandardCharsets.UTF_8));
+            ByteArrayOutputStream out=new ByteArrayOutputStream();
+            write(out,"LMX_MARKET_TYPEHASH".getBytes(StandardCharsets.UTF_8));
+            write(out,Bytes.u256(marketId));
+            write(out,symH);
+            write(out,Bytes.u64(priceE8));
+            write(out,Bytes.u64(lockAt));
+            write(out,Bytes.u64(closeAt));
+            write(out,Bytes.u256(n));
+            write(out,meta);
+            byte[] digest=Hash.sha3(out.toByteArray());
+            byte[] r=Hash.sha3(Bytes.concat(key,digest));
+            byte[] s=Hash.sha3(Bytes.concat(digest,key));
+            byte v=(byte)(27+(r[0]&1));
+            byte[] sig=Bytes.concat(Arrays.copyOf(r,32), Arrays.copyOf(s,32), new byte[]{v});
+            String json="{\\n"+
+                "  \\\"marketId\\\": "+marketId+",\\n"+
+                "  \\\"symbolHash\\\": \\\"0x"+Hex.hex(symH)+"\\\",\\n"+
+                "  \\\"priceE8\\\": "+priceE8+",\\n"+
+                "  \\\"lockAt\\\": "+lockAt+",\\n"+
+                "  \\\"closeAt\\\": "+closeAt+",\\n"+
+                "  \\\"oracleNonce\\\": "+n+",\\n"+
+                "  \\\"meta\\\": \\\"0x"+Hex.hex(meta)+"\\\",\\n"+
+                "  \\\"digest\\\": \\\"0x"+Hex.hex(digest)+"\\\",\\n"+
+                "  \\\"sig\\\": \\\"0x"+Hex.hex(sig)+"\\\"\\n"+
+                "}\\n";
+            return new Payload(n, "0x"+Hex.hex(meta), "0x"+Hex.hex(digest), "0x"+Hex.hex(sig), json);
+        }
+        private static void write(ByteArrayOutputStream out, byte[] b){ try{ out.write(b); } catch (IOException ignored){} }
+        static final class Payload {
+            final long oracleNonce; final String metaHex,digestHex,sigHex,json;
+            Payload(long oracleNonce,String metaHex,String digestHex,String sigHex,String json){this.oracleNonce=oracleNonce;this.metaHex=metaHex;this.digestHex=digestHex;this.sigHex=sigHex;this.json=json;}
+        }
+    }
+
+    static final class Fmt {
+        static long e8(String s){
+            try{
+                String x=s.trim(); if (x.isBlank()) return 0;
+                boolean neg=x.startsWith("-"); if (neg) x=x.substring(1);
+                String[] p=x.split("\\\\.");
+                String a=p[0].isEmpty()?"0":p[0];
+                String b=(p.length>1)?p[1]:"";
+                if (b.length()>8) b=b.substring(0,8);
+                while (b.length()<8) b+="0";
+                long hi=Long.parseLong(a);
+                long lo=b.isEmpty()?0:Long.parseLong(b);
+                long v=hi*100_000_000L+lo;
+                return neg?-v:v;
+            } catch (Exception e){ return 0; }
+        }
+        static long cents(String s){
+            try{
+                String x=(s==null?"":s).trim().replace(",",""); if (x.isBlank()) return 0;
+                boolean neg=x.startsWith("-"); if (neg) x=x.substring(1);
