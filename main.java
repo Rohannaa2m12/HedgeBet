@@ -670,3 +670,59 @@ public class HedgeBet {
         MarketSim(SecureRandom rng){ this.rng=rng; }
         Quote quote(String sym){
             return quotes.computeIfAbsent(sym, s -> {
+                Quote q=new Quote();
+                q.priceE8=Fmt.e8("100.00")+Math.abs(rng.nextLong()%Fmt.e8("25.00"));
+                q.prevE8=q.priceE8;
+                q.spark=Spark.seed(rng, 24);
+                return q;
+            });
+        }
+        void step(){
+            for (Quote q : quotes.values()){
+                q.prevE8=q.priceE8;
+                long drift=(long)(rng.nextGaussian()*(double)Fmt.e8("0.20"));
+                long shock=(rng.nextInt(1000)<5)?(long)(rng.nextGaussian()*(double)Fmt.e8("2.50")):0;
+                q.priceE8=Math.max(1, q.priceE8+drift+shock);
+                q.spark=Spark.roll(q.spark, q.priceE8, q.prevE8);
+            }
+        }
+        Market mk(String symbol,long strikeE8,long bandE8,int openSec,int lockSec,int closeSec){
+            long now=System.currentTimeMillis()/1000;
+            Market m=new Market(++nextId, symbol, strikeE8, bandE8, now+openSec, now+lockSec, now+closeSec);
+            markets.put(m.id, m);
+            return m;
+        }
+        Market get(int id){ return markets.get(id); }
+        boolean bet(int id,String who,Bucket b,long amount){
+            Market m=markets.get(id);
+            if (m==null) return false;
+            long now=System.currentTimeMillis()/1000;
+            if (now<m.openAt||now>=m.lockAt) return false;
+            m.bets.add(new Bet(who,b,amount));
+            if (b==Bucket.UP) m.poolUp+=amount;
+            else if (b==Bucket.DOWN) m.poolDown+=amount;
+            else m.poolFlat+=amount;
+            m.poolTotal+=amount;
+            return true;
+        }
+        Settle settle(int id,long priceE8){
+            Market m=markets.get(id);
+            if (m==null) return null;
+            long now=System.currentTimeMillis()/1000;
+            if (now<m.closeAt) return null;
+            long delta=Math.abs(priceE8-m.strikeE8);
+            Bucket win=(delta<=m.bandE8)?Bucket.FLAT:(priceE8>m.strikeE8?Bucket.UP:Bucket.DOWN);
+            long wp=(win==Bucket.UP)?m.poolUp:(win==Bucket.DOWN?m.poolDown:m.poolFlat);
+            m.settle=new Settle(priceE8, win, wp);
+            return m.settle;
+        }
+    }
+
+    static final class OracleToy {
+        private final SecureRandom rng;
+        private final byte[] key=new byte[32];
+        private long nonce;
+        OracleToy(SecureRandom rng){ this.rng=rng; rng.nextBytes(key); nonce=1000+Math.abs(rng.nextInt(9000)); }
+        String keyHint(){ byte[] h=Hash.sha3(key); return "0x"+Hex.hex(Arrays.copyOfRange(h,0,8))+"…"; }
+        Payload settle(int marketId,String symbol,long priceE8,long lockAt,long closeAt){
+            long n=++nonce;
