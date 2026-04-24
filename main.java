@@ -502,3 +502,59 @@ public class HedgeBet {
             sb.append("  strike=").append(Fmt.money(m.strikeE8)).append("\n");
             sb.append("  band=").append(Fmt.money(m.bandE8)).append("\n");
             sb.append("  openAt=").append(Fmt.epoch(m.openAt)).append("\n");
+            sb.append("  lockAt=").append(Fmt.epoch(m.lockAt)).append("\n");
+            sb.append("  closeAt=").append(Fmt.epoch(m.closeAt)).append("\n\n");
+            sb.append("POOLS\n");
+            sb.append("  UP=").append(Fmt.money2(m.poolUp)).append("\n");
+            sb.append("  DOWN=").append(Fmt.money2(m.poolDown)).append("\n");
+            sb.append("  FLAT=").append(Fmt.money2(m.poolFlat)).append("\n");
+            sb.append("  TOTAL=").append(Fmt.money2(m.poolTotal)).append("\n\n");
+            sb.append("BETS\n");
+            if (m.bets.isEmpty()) sb.append("  (none)\n");
+            for (MarketSim.Bet b : m.bets) sb.append("  ").append(Norm.pad(b.who,6)).append(" ").append(Norm.pad(b.bucket.name(),4)).append(" ").append(Fmt.money2(b.amount)).append("\n");
+            sb.append("\nSTATE\n  phase=").append(m.phase()).append("\n");
+            if (m.settle!=null) sb.append("  final=").append(Fmt.money(m.settle.priceE8)).append(" winner=").append(m.settle.winner).append("\n");
+            else sb.append("  settle: after close\n");
+            return sb.toString();
+        }
+        private static JButton btn(String t, Color fg){
+            JButton b=new JButton(t);
+            b.setFocusPainted(false);
+            b.setFont(new Font(Font.MONOSPACED, Font.BOLD, 12));
+            b.setBackground(new Color(18,24,32));
+            b.setForeground(fg);
+            b.setBorder(BorderFactory.createLineBorder(new Color(28,36,48),1));
+            return b;
+        }
+        private static JLabel lbl(Theme theme, String t){ JLabel l=new JLabel(t); l.setFont(theme.fontSm); l.setForeground(theme.fg1); return l; }
+    }
+
+    static final class HelpPanel extends JPanel {
+        HelpPanel(Theme theme) {
+            super(new BorderLayout());
+            setPreferredSize(new Dimension(440,620));
+            setBackground(theme.bg0);
+            JTextArea a=new JTextArea();
+            a.setFont(theme.fontSm);
+            a.setBackground(theme.bg0);
+            a.setForeground(theme.fg0);
+            a.setEditable(false);
+            a.setBorder(new EmptyBorder(10,10,10,10));
+            a.setText("HedgeBet quick guide\\n-------------------\\nhelp | clear\\nwatch list | watch add LAMA/USD | watch del ETH/USD\\nsym LAMA/USD\\nmk 100 0.5 2 10 20\\nbet up 250 | bet down 250 | bet flat 250\\nsettle 101.25\\noracle id | oracle build\\n");
+            add(new JScrollPane(a), BorderLayout.CENTER);
+        }
+    }
+
+    private static JPanel title(Theme theme, String left, String right){
+        JPanel p=new JPanel(new BorderLayout());
+        p.setBackground(theme.bg1);
+        JLabel l=new JLabel(" "+left);
+        l.setFont(theme.fontMd);
+        l.setForeground(theme.cyan);
+        JLabel r=new JLabel(" "+right+" ");
+        r.setFont(theme.fontSm);
+        r.setForeground(theme.dim);
+        p.add(l, BorderLayout.WEST);
+        p.add(r, BorderLayout.EAST);
+        return p;
+    }
