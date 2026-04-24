@@ -838,3 +838,50 @@ public class HedgeBet {
             int idx=(int)Math.round(t*(blocks.length-1));
             idx=Math.max(0, Math.min(blocks.length-1, idx));
             String s=(prev==null||prev.length()<2)?seed(new SecureRandom(),24):prev;
+            return s.substring(1)+blocks[idx];
+        }
+    }
+
+    static final class Bytes {
+        static byte[] concat(byte[]... a){
+            int n=0; for (byte[] b : a) n+=(b==null?0:b.length);
+            byte[] out=new byte[n]; int p=0;
+            for (byte[] b : a){ if (b==null) continue; System.arraycopy(b,0,out,p,b.length); p+=b.length; }
+            return out;
+        }
+        static byte[] u64(long x){
+            byte[] out=new byte[8]; long v=x;
+            for (int i=7;i>=0;i--){ out[i]=(byte)(v&0xFF); v>>>=8; }
+            return out;
+        }
+        static byte[] u256(long x){
+            byte[] out=new byte[32]; long v=x;
+            for (int i=31;i>=24;i--){ out[i]=(byte)(v&0xFF); v>>>=8; }
+            return out;
+        }
+    }
+
+    static final class Hash {
+        static byte[] sha3(byte[] input){
+            try{ return MessageDigest.getInstance("SHA3-256").digest(input); }
+            catch (Exception e){
+                try{ return MessageDigest.getInstance("SHA-256").digest(input); }
+                catch (Exception ex){ throw new RuntimeException("no digest provider"); }
+            }
+        }
+    }
+
+    static final class Hex {
+        private static final char[] HEX="0123456789abcdef".toCharArray();
+        static String hex(byte[] b){
+            char[] out=new char[b.length*2];
+            for (int i=0;i<b.length;i++){
+                int v=b[i]&0xFF;
+                out[i*2]=HEX[v>>>4];
+                out[i*2+1]=HEX[v&0x0F];
+            }
+            return new String(out);
+        }
+    }
+
+}
