@@ -334,3 +334,59 @@ public class HedgeBet {
                     else if (e.getKeyCode()==KeyEvent.VK_DOWN){ historyDown(); e.consume(); }
                 }
             });
+        }
+        void focus(){ SwingUtilities.invokeLater(() -> in.requestFocusInWindow()); }
+        private void run(){
+            String raw = in.getText()==null?"":in.getText().trim();
+            if (raw.isBlank()) return;
+            hist.addLast(raw); while (hist.size()>120) hist.removeFirst();
+            histCur=-1; in.setText("");
+            sink.accept(raw);
+        }
+        private void historyUp(){
+            if (hist.isEmpty()) return;
+            if (histCur<0) histCur=hist.size()-1;
+            else histCur=Math.max(0, histCur-1);
+            in.setText(new ArrayList<>(hist).get(histCur));
+        }
+        private void historyDown(){
+            if (hist.isEmpty()||histCur<0) return;
+            histCur++;
+            if (histCur>=hist.size()){ histCur=-1; in.setText(""); return; }
+            in.setText(new ArrayList<>(hist).get(histCur));
+        }
+    }
+
+    static final class WatchPanel extends JPanel {
+        private final State state;
+        private final MarketSim sim;
+        private final Tape tape;
+        private final JTable table;
+        private boolean dense;
+        WatchPanel(Theme theme, State state, MarketSim sim, Tape tape) {
+            super(new BorderLayout());
+            this.state=state; this.sim=sim; this.tape=tape;
+            setPreferredSize(new Dimension(440,620));
+            setBackground(theme.bg0);
+            table = new JTable(new WatchModel(state, sim));
+            table.setFont(theme.fontSm);
+            table.setBackground(theme.bg0);
+            table.setForeground(theme.fg0);
+            table.setRowHeight(20);
+            table.setGridColor(theme.bg1);
+            table.getTableHeader().setFont(theme.fontSm);
+            table.getTableHeader().setBackground(theme.bg1);
+            table.getTableHeader().setForeground(theme.fg1);
+            JScrollPane sp = new JScrollPane(table);
+            sp.setBorder(BorderFactory.createLineBorder(theme.bg1,1));
+            add(title(theme,"WATCHLIST","dbl-click -> active symbol"), BorderLayout.NORTH);
+            add(sp, BorderLayout.CENTER);
+            table.addMouseListener(new MouseAdapter() {
+                @Override public void mouseClicked(MouseEvent e){
+                    if (e.getClickCount()>=2){
+                        int r=table.getSelectedRow();
+                        if (r>=0){
+                            String sym=(String)table.getModel().getValueAt(r,0);
+                            state.activeSymbol=sym;
+                            tape.add("WATCH","active symbol="+sym);
+                        }
