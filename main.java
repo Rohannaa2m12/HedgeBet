@@ -390,3 +390,59 @@ public class HedgeBet {
                             state.activeSymbol=sym;
                             tape.add("WATCH","active symbol="+sym);
                         }
+                    }
+                }
+            });
+        }
+        void refresh(){ SwingUtilities.invokeLater(() -> ((WatchModel)table.getModel()).fireTableDataChanged()); }
+        void toggleDensity(){ dense=!dense; table.setRowHeight(dense?18:20); }
+    }
+
+    static final class MarketPanel extends JPanel {
+        private final State state;
+        private final MarketSim sim;
+        private final OracleToy oracle;
+        private final Tape tape;
+        private final JTextArea box = new JTextArea();
+        private final JTextField stake = new JTextField("250.00");
+        private boolean dense;
+        MarketPanel(Theme theme, State state, MarketSim sim, OracleToy oracle, Tape tape) {
+            super(new BorderLayout(10,10));
+            this.state=state; this.sim=sim; this.oracle=oracle; this.tape=tape;
+            setPreferredSize(new Dimension(440,620));
+            setBackground(theme.bg0);
+            setBorder(new EmptyBorder(10,10,10,10));
+            add(title(theme,"MARKET","sim + payload"), BorderLayout.NORTH);
+            box.setFont(theme.fontSm);
+            box.setEditable(false);
+            box.setBackground(theme.bg0);
+            box.setForeground(theme.fg0);
+            box.setBorder(BorderFactory.createLineBorder(theme.bg1,1));
+            box.setRows(22);
+            add(new JScrollPane(box), BorderLayout.CENTER);
+            add(controls(theme), BorderLayout.SOUTH);
+            refresh();
+        }
+        void refresh(){ SwingUtilities.invokeLater(() -> box.setText(render())); }
+        void toggleDensity(){ dense=!dense; box.setRows(dense?16:22); }
+        private JPanel controls(Theme theme){
+            JPanel p=new JPanel(new GridBagLayout());
+            p.setBackground(theme.bg0);
+            GridBagConstraints g=new GridBagConstraints();
+            g.insets=new Insets(4,4,4,4);
+            g.fill=GridBagConstraints.HORIZONTAL;
+            JButton mk=btn("NEW", theme.cyan), up=btn("UP", theme.lime), dn=btn("DOWN", theme.red), fl=btn("FLAT", theme.amber);
+            JButton set=btn("SETTLE", theme.blue), or=btn("ORACLE JSON", theme.amber);
+            stake.setFont(theme.fontMono);
+            stake.setBackground(theme.bg1); stake.setForeground(theme.fg0); stake.setCaretColor(theme.fg0);
+            stake.setBorder(BorderFactory.createLineBorder(theme.bg1,1));
+            g.gridx=0; g.gridy=0; p.add(mk,g);
+            g.gridx=1; g.gridy=0; p.add(lbl(theme,"STAKE"),g);
+            g.gridx=2; g.gridy=0; p.add(stake,g);
+            g.gridx=0; g.gridy=1; p.add(up,g);
+            g.gridx=1; g.gridy=1; p.add(dn,g);
+            g.gridx=2; g.gridy=1; p.add(fl,g);
+            g.gridx=0; g.gridy=2; g.gridwidth=3; p.add(set,g);
+            g.gridx=0; g.gridy=3; g.gridwidth=3; p.add(or,g);
+            mk.addActionListener(e -> {
+                String sym=state.activeSymbol;
