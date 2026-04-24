@@ -614,3 +614,59 @@ public class HedgeBet {
         CmdResult(String tag,String toast,List<String> lines,Runnable mutate){this.tag=tag;this.toast=toast;this.lines=lines;this.mutate=mutate;}
         static CmdResult ok(String tag,String toast){ return new CmdResult(tag, toast, null, null); }
         static CmdResult err(String tag,String toast){ return new CmdResult(tag, toast, List.of("! "+toast), null); }
+        static CmdResult lines(String tag,String toast,List<String> lines){ return new CmdResult(tag, toast, lines, null); }
+        static CmdResult mutate(String tag,String toast,Runnable r){ return new CmdResult(tag, toast, null, r); }
+    }
+    static final class CmdEngine {
+        private final Map<String, Cmd> map=new LinkedHashMap<>();
+        void reg(String name,String help,CmdFn fn){ map.put(name, new Cmd(help, fn)); }
+        CmdResult exec(String raw){
+            List<String> a=Norm.split(raw);
+            if (a.isEmpty()) return null;
+            Cmd c=map.get(a.get(0).toLowerCase(Locale.ROOT));
+            if (c==null) return CmdResult.err("CMD","unknown: "+a.get(0));
+            try{ return c.fn.run(new CmdCtx(a)); } catch (Exception e){ return CmdResult.err("CMD","error: "+e.getMessage()); }
+        }
+    }
+
+    static final class WatchModel extends javax.swing.table.AbstractTableModel {
+        private final State state; private final MarketSim sim;
+        private final String[] cols={"SYMBOL","LAST","CHG%","SPARK"};
+        WatchModel(State state, MarketSim sim){ this.state=state; this.sim=sim; }
+        @Override public int getRowCount(){ return state.watch.size(); }
+        @Override public int getColumnCount(){ return cols.length; }
+        @Override public String getColumnName(int c){ return cols[c]; }
+        @Override public Object getValueAt(int r,int c){
+            String sym=state.watch.get(r);
+            MarketSim.Quote q=sim.quote(sym);
+            return switch (c){
+                case 0 -> sym;
+                case 1 -> Fmt.money(q.priceE8);
+                case 2 -> q.pct();
+                case 3 -> q.spark;
+                default -> "";
+            };
+        }
+    }
+
+    static final class MarketSim {
+        enum Bucket {UP, DOWN, FLAT}
+        static final class Quote {
+            long priceE8, prevE8; String spark;
+            String pct(){ if (prevE8<=0) return "0.00%"; double p=((double)priceE8-(double)prevE8)/(double)prevE8*100.0; return String.format(Locale.ROOT,"%+.2f%%",p); }
+        }
+        static final class Bet { final String who; final Bucket bucket; final long amount; Bet(String who,Bucket bucket,long amount){this.who=who;this.bucket=bucket;this.amount=amount;} }
+        static final class Settle { final long priceE8; final Bucket winner; final long winningPool; Settle(long priceE8,Bucket winner,long winningPool){this.priceE8=priceE8;this.winner=winner;this.winningPool=winningPool;} }
+        static final class Market {
+            final int id; final String symbol; final long strikeE8, bandE8; final long openAt, lockAt, closeAt;
+            long poolUp, poolDown, poolFlat, poolTotal; final List<Bet> bets=new ArrayList<>(); Settle settle;
+            Market(int id,String symbol,long strikeE8,long bandE8,long openAt,long lockAt,long closeAt){ this.id=id;this.symbol=symbol;this.strikeE8=strikeE8;this.bandE8=bandE8;this.openAt=openAt;this.lockAt=lockAt;this.closeAt=closeAt; }
+            String phase(){ long now=System.currentTimeMillis()/1000; if (settle!=null) return "SETTLED"; if (now<openAt) return "PREOPEN"; if (now<lockAt) return "OPEN"; if (now<closeAt) return "LOCKED"; return "CLOSEWAIT"; }
+        }
+        private final SecureRandom rng;
+        private final Map<String, Quote> quotes=new HashMap<>();
+        private final Map<Integer, Market> markets=new HashMap<>();
+        private int nextId;
+        MarketSim(SecureRandom rng){ this.rng=rng; }
+        Quote quote(String sym){
+            return quotes.computeIfAbsent(sym, s -> {
