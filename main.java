@@ -278,3 +278,59 @@ public class HedgeBet {
             out.setCaretColor(theme.fg0);
             out.setBorder(new EmptyBorder(10,10,10,10));
             JScrollPane sp = new JScrollPane(out);
+            sp.setBorder(BorderFactory.createLineBorder(theme.bg1, 1));
+            sp.getVerticalScrollBar().setUnitIncrement(16);
+            add(sp, BorderLayout.CENTER);
+        }
+        void banner() {
+            println("T12", "HedgeBet / lama terminal  |  mode=SIM  |  chain=EVM");
+            println("T12", "try: help | mk 100 0.5 2 10 20 | bet up 250 | settle 101.25 | oracle build");
+            println("T12", "");
+        }
+        void println(String t, String msg) {
+            String line = (t==null?"":t) + " " + (msg==null?"":msg);
+            last.addLast(line);
+            while (last.size()>60) last.removeFirst();
+            out.append(line + "\n");
+            out.setCaretPosition(out.getDocument().getLength());
+        }
+        void clear(){ out.setText(""); last.clear(); }
+        String last(){ return last.peekLast()==null ? "" : last.peekLast(); }
+    }
+
+    static final class StatusLine extends JPanel {
+        private final JLabel left = new JLabel();
+        private final JLabel right = new JLabel();
+        StatusLine(Theme theme) {
+            super(new BorderLayout());
+            setBackground(theme.bg1);
+            left.setFont(theme.fontSm); right.setFont(theme.fontSm);
+            left.setForeground(theme.fg1); right.setForeground(theme.fg1);
+            left.setText("HedgeBet / LamaXII"); right.setText("booting...");
+            add(left, BorderLayout.WEST); add(right, BorderLayout.EAST);
+        }
+        void setRight(String s){ SwingUtilities.invokeLater(() -> right.setText(s)); }
+    }
+
+    static final class CommandBar extends JPanel {
+        private final JTextField in = new JTextField();
+        private final Deque<String> hist = new ArrayDeque<>();
+        private int histCur=-1;
+        private final java.util.function.Consumer<String> sink;
+        CommandBar(Theme theme, java.util.function.Consumer<String> sink) {
+            super(new BorderLayout(10,10));
+            this.sink = sink;
+            setBackground(theme.bg0);
+            JLabel p = new JLabel("CMD");
+            p.setFont(theme.fontMd); p.setForeground(theme.amber);
+            in.setFont(theme.fontMono);
+            in.setBackground(theme.bg1); in.setForeground(theme.fg0); in.setCaretColor(theme.fg0);
+            in.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(theme.bg1,1), new EmptyBorder(8,10,8,10)));
+            add(p, BorderLayout.WEST); add(in, BorderLayout.CENTER);
+            in.addActionListener(e -> run());
+            in.addKeyListener(new KeyAdapter() {
+                @Override public void keyPressed(KeyEvent e){
+                    if (e.getKeyCode()==KeyEvent.VK_UP){ historyUp(); e.consume(); }
+                    else if (e.getKeyCode()==KeyEvent.VK_DOWN){ historyDown(); e.consume(); }
+                }
+            });
