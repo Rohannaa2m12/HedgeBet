@@ -558,3 +558,59 @@ public class HedgeBet {
         p.add(r, BorderLayout.EAST);
         return p;
     }
+
+    static final class State {
+        List<String> watch = new ArrayList<>();
+        String activeSymbol = "LAMA/USD";
+        int activeMarketId = 0;
+        void copyFrom(State o){ watch=new ArrayList<>(o.watch); activeSymbol=o.activeSymbol; activeMarketId=o.activeMarketId; }
+    }
+
+    static final class Persist {
+        private final Path file = Path.of(System.getProperty("user.home"), ".hedgebet_state.properties");
+        void save(State s){
+            try{
+                Properties p=new Properties();
+                p.setProperty("activeSymbol", s.activeSymbol==null?"":s.activeSymbol);
+                p.setProperty("activeMarketId", Integer.toString(s.activeMarketId));
+                p.setProperty("watch", String.join(",", s.watch));
+                try (OutputStream os=Files.newOutputStream(file)){ p.store(os, "HedgeBet"); }
+            } catch (Exception ignored){}
+        }
+        State load(){
+            try{
+                if (!Files.exists(file)) return null;
+                Properties p=new Properties();
+                try (InputStream is=Files.newInputStream(file)){ p.load(is); }
+                State s=new State();
+                s.activeSymbol=p.getProperty("activeSymbol","LAMA/USD");
+                s.activeMarketId=Integer.parseInt(p.getProperty("activeMarketId","0"));
+                String w=p.getProperty("watch","");
+                if (!w.isBlank()) s.watch.addAll(Arrays.asList(w.split(",")));
+                return s;
+            } catch (Exception e){ return null; }
+        }
+    }
+
+    static final class TapeItem { final String t, tag, msg; TapeItem(String t,String tag,String msg){this.t=t;this.tag=tag;this.msg=msg;} }
+    static final class Tape {
+        private final ConcurrentLinkedQueue<TapeItem> q=new ConcurrentLinkedQueue<>();
+        private final Deque<TapeItem> ring=new ArrayDeque<>();
+        private final int cap;
+        Tape(int cap){this.cap=cap;}
+        void add(String tag,String msg){
+            TapeItem it=new TapeItem(clock(), tag, msg);
+            q.add(it); ring.addLast(it);
+            while (ring.size()>cap) ring.removeFirst();
+        }
+        TapeItem poll(){ return q.poll(); }
+    }
+
+    static final class CmdCtx { final List<String> args; CmdCtx(List<String> args){this.args=args;} }
+    interface CmdFn { CmdResult run(CmdCtx c); }
+    static final class Cmd { final String help; final CmdFn fn; Cmd(String help, CmdFn fn){this.help=help; this.fn=fn;} }
+    static final class CmdResult {
+        final String tag, toast; final List<String> lines; final Runnable mutate;
+        CmdResult(String tag,String toast,List<String> lines,Runnable mutate){this.tag=tag;this.toast=toast;this.lines=lines;this.mutate=mutate;}
+        static CmdResult ok(String tag,String toast){ return new CmdResult(tag, toast, null, null); }
+        static CmdResult err(String tag,String toast){ return new CmdResult(tag, toast, List.of("! "+toast), null); }
