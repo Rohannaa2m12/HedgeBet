@@ -446,3 +446,59 @@ public class HedgeBet {
             g.gridx=0; g.gridy=3; g.gridwidth=3; p.add(or,g);
             mk.addActionListener(e -> {
                 String sym=state.activeSymbol;
+                long strike=sim.quote(sym).priceE8;
+                long band=Math.max(Fmt.e8("0.25"), strike/200);
+                MarketSim.Market m=sim.mk(sym, strike, band, 2, 10, 20);
+                state.activeMarketId=m.id;
+                tape.add("MKT","created #"+m.id+" "+sym);
+                refresh();
+            });
+            up.addActionListener(e -> bet(MarketSim.Bucket.UP));
+            dn.addActionListener(e -> bet(MarketSim.Bucket.DOWN));
+            fl.addActionListener(e -> bet(MarketSim.Bucket.FLAT));
+            set.addActionListener(e -> {
+                MarketSim.Market m=sim.get(state.activeMarketId);
+                if (m==null){ tape.add("SET","no active market"); return; }
+                long pz=sim.quote(m.symbol).priceE8;
+                MarketSim.Settle s=sim.settle(m.id, pz);
+                if (s==null) tape.add("SET","market not closable yet");
+                else tape.add("SET","settled #"+m.id+" final="+Fmt.money(pz)+" winner="+s.winner);
+                refresh();
+            });
+            or.addActionListener(e -> {
+                MarketSim.Market m=sim.get(state.activeMarketId);
+                if (m==null||m.settle==null){ tape.add("ORACLE","need settled market"); return; }
+                OracleToy.Payload pl=oracle.settle(m.id, m.symbol, m.settle.priceE8, m.lockAt, m.closeAt);
+                Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(pl.json), null);
+                tape.add("ORACLE","copied JSON");
+            });
+            return p;
+        }
+        private void bet(MarketSim.Bucket b){
+            MarketSim.Market m=sim.get(state.activeMarketId);
+            if (m==null){ tape.add("BET","no active market"); return; }
+            long amt=Fmt.cents(stake.getText());
+            if (amt<=0){ tape.add("BET","bad amount"); return; }
+            if (!sim.bet(m.id,"YOU",b,amt)){ tape.add("BET","market not open"); return; }
+            tape.add("BET","YOU "+b+" "+Fmt.money2(amt));
+            refresh();
+        }
+        private String render(){
+            StringBuilder sb=new StringBuilder();
+            String sym=state.activeSymbol;
+            MarketSim.Quote q=sim.quote(sym);
+            MarketSim.Market m=sim.get(state.activeMarketId);
+            sb.append("ACTIVE SYMBOL: ").append(sym).append("\n");
+            sb.append("ACTIVE MARKET: ").append(m==null?"—":"#"+m.id).append("\n\n");
+            sb.append("QUOTE\n");
+            sb.append("  last=").append(Fmt.money(q.priceE8)).append("  chg%=").append(q.pct()).append("\n");
+            sb.append("  spark=").append(q.spark).append("\n\n");
+            if (m==null){
+                sb.append("TIP\n  - click NEW or run: mk 100 0.5 2 10 20\n  - then bet: bet up|down|flat 250\n");
+                return sb.toString();
+            }
+            sb.append("MARKET\n");
+            sb.append("  symbol=").append(m.symbol).append("\n");
+            sb.append("  strike=").append(Fmt.money(m.strikeE8)).append("\n");
+            sb.append("  band=").append(Fmt.money(m.bandE8)).append("\n");
+            sb.append("  openAt=").append(Fmt.epoch(m.openAt)).append("\n");
