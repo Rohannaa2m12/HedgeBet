@@ -782,3 +782,59 @@ public class HedgeBet {
             try{
                 String x=(s==null?"":s).trim().replace(",",""); if (x.isBlank()) return 0;
                 boolean neg=x.startsWith("-"); if (neg) x=x.substring(1);
+                String[] p=x.split("\\\\.");
+                String a=p[0].isEmpty()?"0":p[0];
+                String b=(p.length>1)?p[1]:"";
+                if (b.length()>2) b=b.substring(0,2);
+                while (b.length()<2) b+="0";
+                long hi=Long.parseLong(a);
+                long lo=b.isEmpty()?0:Long.parseLong(b);
+                long v=hi*100L+lo;
+                return neg?-v:v;
+            } catch (Exception e){ return 0; }
+        }
+        static String money(long e8){ return String.format(Locale.ROOT,"%.2f",(double)e8/1e8); }
+        static String money2(long cents){ return String.format(Locale.ROOT,"%.2f",(double)cents/100.0); }
+        static String epoch(long sec){ return DateTimeFormatter.ofPattern("MM-dd HH:mm:ss").withZone(ZoneId.systemDefault()).format(Instant.ofEpochSecond(sec)); }
+    }
+
+    static final class Norm {
+        static String symbol(String s){
+            if (s==null) return "";
+            String x=s.trim().toUpperCase(Locale.ROOT).replaceAll("\\\\s+","");
+            if (!x.contains("/")) return "";
+            if (x.length()<5||x.length()>18) return "";
+            return x;
+        }
+        static int i(String s){ try{ return Integer.parseInt(s.trim()); } catch (Exception e){ return 0; } }
+        static List<String> split(String raw){
+            List<String> out=new ArrayList<>();
+            if (raw==null) return out;
+            String s=raw.trim();
+            if (s.isEmpty()) return out;
+            StringBuilder cur=new StringBuilder();
+            boolean inQ=false;
+            for (int i=0;i<s.length();i++){
+                char c=s.charAt(i);
+                if (c=='\"'){ inQ=!inQ; continue; }
+                if (!inQ && Character.isWhitespace(c)){
+                    if (!cur.isEmpty()){ out.add(cur.toString()); cur.setLength(0); }
+                } else cur.append(c);
+            }
+            if (!cur.isEmpty()) out.add(cur.toString());
+            return out;
+        }
+        static String pad(String s,int w){ if (s.length()>=w) return s; StringBuilder b=new StringBuilder(s); while (b.length()<w) b.append(' '); return b.toString(); }
+    }
+
+    static final class Spark {
+        private static final char[] blocks={'▁','▂','▃','▄','▅','▆','▇','█'};
+        static String seed(SecureRandom rng,int n){ StringBuilder b=new StringBuilder(); for(int i=0;i<n;i++) b.append(blocks[rng.nextInt(blocks.length)]); return b.toString(); }
+        static String roll(String prev,long now,long prior){
+            if (prior<=0) return seed(new SecureRandom(),24);
+            double p=((double)now-(double)prior)/(double)prior;
+            double x=Math.max(-0.04, Math.min(0.04, p));
+            double t=(x+0.04)/0.08;
+            int idx=(int)Math.round(t*(blocks.length-1));
+            idx=Math.max(0, Math.min(blocks.length-1, idx));
+            String s=(prev==null||prev.length()<2)?seed(new SecureRandom(),24):prev;
